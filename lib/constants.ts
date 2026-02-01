@@ -171,8 +171,89 @@ export const MARKET_DATA_WIDGET_CONFIG = {
     ],
 };
 
+// TradingView符号转换函数
+export function getTradingViewSymbol(symbol: string): string {
+    const trimmed = symbol.trim().toUpperCase();
+    
+    console.log(`🔍 TradingView符号转换输入: "${symbol}" -> "${trimmed}"`);
+    
+    // 如果已经包含TradingView格式的交易所前缀，直接返回
+    if (trimmed.includes(':')) {
+        console.log(`🔍 已经是TradingView格式: ${trimmed}`);
+        return trimmed;
+    }
+    
+    // 处理系统内部格式：us.AAPL, hk.00700, us.nvda 等（支持大小写）
+    if (trimmed.startsWith('US.') || trimmed.startsWith('us.')) {
+        // 美股：us.AAPL -> NASDAQ:AAPL
+        const code = trimmed.substring(3);
+        const result = `NASDAQ:${code}`;
+        console.log(`🔍 美股转换: ${trimmed} -> ${result}`);
+        return result;
+    } else if (trimmed.startsWith('HK.') || trimmed.startsWith('hk.')) {
+        // 港股：hk.00700 -> 00700.HK (TradingView标准格式)
+        const code = trimmed.substring(3);
+        const result = `${code}.HK`;
+        console.log(`🔍 港股转换: ${trimmed} -> ${result}`);
+        return result;
+    } else if (trimmed.startsWith('SH.') || trimmed.startsWith('sh.') || 
+               trimmed.startsWith('SZ.') || trimmed.startsWith('sz.') || 
+               trimmed.startsWith('BJ.') || trimmed.startsWith('bj.')) {
+        // A股：sh.000001 -> SSE:000001
+        const exchange = trimmed.toLowerCase().startsWith('sh.') ? 'SSE' : 
+                        trimmed.toLowerCase().startsWith('sz.') ? 'SZSE' : 'BSE';
+        const code = trimmed.substring(3);
+        const result = `${exchange}:${code}`;
+        console.log(`🔍 A股转换: ${trimmed} -> ${result}`);
+        return result;
+    }
+    
+    // 处理不带前缀的原始符号
+    if (trimmed.startsWith('SH') || trimmed.startsWith('SZ') || trimmed.startsWith('BJ')) {
+        // A股：SH000001 -> SSE:000001
+        const exchange = trimmed.startsWith('SH') ? 'SSE' : 
+                        trimmed.startsWith('SZ') ? 'SZSE' : 'BSE';
+        const code = trimmed.substring(2);
+        const result = `${exchange}:${code}`;
+        console.log(`🔍 A股前缀转换: ${trimmed} -> ${result}`);
+        return result;
+    } else if (trimmed.startsWith('HK')) {
+        // 港股：HK00700 -> 00700.HK (TradingView标准格式)
+        const code = trimmed.substring(2);
+        const result = `${code}.HK`;
+        console.log(`🔍 港股前缀转换: ${trimmed} -> ${result}`);
+        return result;
+    } else if (trimmed.startsWith('US')) {
+        // 美股：USAAPL -> NASDAQ:AAPL
+        const code = trimmed.substring(2);
+        const result = `NASDAQ:${code}`;
+        console.log(`🔍 美股前缀转换: ${trimmed} -> ${result}`);
+        return result;
+    } else if (/^[A-Za-z]{1,5}$/.test(trimmed)) {
+        // 纯字母代码：AAPL -> NASDAQ:AAPL
+        const result = `NASDAQ:${trimmed}`;
+        console.log(`🔍 纯字母转换: ${trimmed} -> ${result}`);
+        return result;
+    } else if (/^[036]\d{5}$/.test(trimmed)) {
+        // A股代码：000001 -> SSE:000001（优先识别A股）
+        const exchange = trimmed.startsWith('6') ? 'SSE' : 'SZSE';
+        const result = `${exchange}:${trimmed}`;
+        console.log(`🔍 A股代码转换: ${trimmed} -> ${result}`);
+        return result;
+    } else if (/^\d{4,5}$/.test(trimmed)) {
+        // 港股代码：9988 -> 9988.HK (TradingView标准格式)
+        const result = `${trimmed}.HK`;
+        console.log(`🔍 港股代码转换: ${trimmed} -> ${result}`);
+        return result;
+    }
+    
+    // 默认情况：直接返回大写
+    console.log(`🔍 默认转换: ${trimmed} -> ${trimmed}`);
+    return trimmed;
+}
+
 export const SYMBOL_INFO_WIDGET_CONFIG = (symbol: string) => ({
-    symbol: symbol.toUpperCase(),
+    symbol: getTradingViewSymbol(symbol),
     colorTheme: 'dark',
     isTransparent: true,
     locale: 'en',
@@ -193,7 +274,7 @@ export const CANDLE_CHART_WIDGET_CONFIG = (symbol: string) => ({
     locale: 'en',
     save_image: false,
     style: 1,
-    symbol: symbol.toUpperCase(),
+    symbol: getTradingViewSymbol(symbol),
     theme: 'dark',
     timezone: 'Etc/UTC',
     backgroundColor: '#141414',
@@ -219,7 +300,7 @@ export const BASELINE_WIDGET_CONFIG = (symbol: string) => ({
     locale: 'en',
     save_image: false,
     style: 10,
-    symbol: symbol.toUpperCase(),
+    symbol: getTradingViewSymbol(symbol),
     theme: 'dark',
     timezone: 'Etc/UTC',
     backgroundColor: '#141414',
@@ -233,7 +314,7 @@ export const BASELINE_WIDGET_CONFIG = (symbol: string) => ({
 });
 
 export const TECHNICAL_ANALYSIS_WIDGET_CONFIG = (symbol: string) => ({
-    symbol: symbol.toUpperCase(),
+    symbol: getTradingViewSymbol(symbol),
     colorTheme: 'dark',
     isTransparent: 'true',
     locale: 'en',
@@ -244,7 +325,7 @@ export const TECHNICAL_ANALYSIS_WIDGET_CONFIG = (symbol: string) => ({
 });
 
 export const COMPANY_PROFILE_WIDGET_CONFIG = (symbol: string) => ({
-    symbol: symbol.toUpperCase(),
+    symbol: getTradingViewSymbol(symbol),
     colorTheme: 'dark',
     isTransparent: 'true',
     locale: 'en',
@@ -253,7 +334,7 @@ export const COMPANY_PROFILE_WIDGET_CONFIG = (symbol: string) => ({
 });
 
 export const COMPANY_FINANCIALS_WIDGET_CONFIG = (symbol: string) => ({
-    symbol: symbol.toUpperCase(),
+    symbol: getTradingViewSymbol(symbol),
     colorTheme: 'dark',
     isTransparent: 'true',
     locale: 'en',

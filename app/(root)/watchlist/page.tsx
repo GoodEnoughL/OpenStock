@@ -4,7 +4,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { getUserWatchlist } from '@/lib/actions/watchlist.actions';
 import { getUserAlerts } from '@/lib/actions/alert.actions';
-import { getNews } from '@/lib/actions/finnhub.actions';
+import { getNews } from '@/lib/actions/stock.actions';
 import WatchlistManager from '@/components/watchlist/WatchlistManager';
 import AlertsPanel from '@/components/watchlist/AlertsPanel';
 import NewsGrid from '@/components/watchlist/NewsGrid';

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { removeFromWatchlist } from "@/lib/actions/watchlist.actions";
-import { getQuote } from "@/lib/actions/finnhub.actions";
+import { getQuote } from "@/lib/actions/stock.actions";
 import { Bell, Loader2, X } from "lucide-react";
 import CreateAlertModal from "./CreateAlertModal";
 
