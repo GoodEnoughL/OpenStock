@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
 import {
     Sheet,
     SheetContent,
@@ -17,16 +16,9 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Star, X, Plus, TrendingUp, TrendingDown, Clock, DollarSign, Percent, Tag } from 'lucide-react';
+import { Star, X, Plus, TrendingUp, TrendingDown, Tag } from 'lucide-react';
 import { toast } from 'sonner';
-import { updateTradeReview, getUserTags, getTradePairDetail } from '@/lib/actions/trade.actions';
+import { updateTradeReview, getUserTags } from '@/lib/actions/trade.actions';
 import { TradingViewChart } from './TradingViewChart';
 
 interface TradePair {
@@ -85,53 +77,43 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
         customTags: [],
     });
     const [isSaving, setIsSaving] = useState(false);
-    const [tradeDetail, setTradeDetail] = useState<any>(null);
 
     useEffect(() => {
         if (open && trade) {
             loadUserTags();
-            loadTradeDetail();
+            // Reset review when opening new trade
+            setReview({
+                rating: 3,
+                mindset: [],
+                strategyTags: [],
+                mistakeTags: [],
+                customTags: [],
+                notes: '',
+            });
         }
     }, [open, trade]);
 
     const loadUserTags = async () => {
-        try {
-            // 这里需要从父组件传入 userId 或从 session 获取
-            // 简化处理，使用默认标签
-            setUserTags({
-                mindsetTags: ['贪婪', '恐惧', '冲动', '犹豫', '冷静', '自信', '焦虑', '兴奋', '耐心', '急躁'],
-                strategyTags: ['趋势跟踪', '价值投资', '波段操作', '日内交易', '突破交易', '回调买入', '均线策略', '定投'],
-                mistakeTags: ['追涨杀跌', '止损不及时', '仓位过重', '频繁交易', '逆势操作', '没有计划', '情绪化交易', '过早止盈'],
-                customTags: [],
-            });
-        } catch (error) {
-            console.error('Load user tags error:', error);
-        }
-    };
-
-    const loadTradeDetail = async () => {
-        if (!trade) return;
-        try {
-            // 这里需要从父组件传入 userId
-            // const detail = await getTradePairDetail(userId, trade._id);
-            // setReview(detail.review || {});
-            // setTradeDetail(detail);
-        } catch (error) {
-            console.error('Load trade detail error:', error);
-        }
+        // Default tags - in production these would come from user settings
+        setUserTags({
+            mindsetTags: ['Greedy', 'Fearful', 'Impulsive', 'Hesitant', 'Calm', 'Confident', 'Anxious', 'Excited', 'Patient', 'Impatient'],
+            strategyTags: ['Trend Following', 'Value Investing', 'Swing Trading', 'Day Trading', 'Breakout', 'Pullback', 'MA Strategy', 'DCA'],
+            mistakeTags: ['Chasing', 'Late Stop Loss', 'Heavy Position', 'Over Trading', 'Against Trend', 'No Plan', 'Emotional', 'Early Take Profit'],
+            customTags: [],
+        });
     };
 
     const handleSave = async () => {
         if (!trade) return;
         setIsSaving(true);
         try {
-            // 这里需要传入 userId
-            // await updateTradeReview(userId, trade._id, review);
-            toast.success('复盘记录已保存');
+            // Note: userId should come from context or props in real implementation
+            await updateTradeReview('temp-user-id', trade._id, review);
+            toast.success('Review saved successfully');
             onSave?.();
             onOpenChange(false);
         } catch (error) {
-            toast.error('保存失败');
+            toast.error('Failed to save review');
         } finally {
             setIsSaving(false);
         }
@@ -156,40 +138,41 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
     if (!trade) return null;
 
     const isProfit = (trade.netProfit || 0) >= 0;
+    const totalCommission = trade.openFee + (trade.closeFee || 0);
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full sm:max-w-3xl overflow-hidden flex flex-col p-0">
+            <SheetContent className="w-full sm:max-w-4xl overflow-hidden flex flex-col p-0">
                 <SheetHeader className="px-6 py-4 border-b">
                     <div className="flex items-center justify-between">
                         <SheetTitle className="flex items-center gap-3">
                             <span className="text-xl font-bold">{trade.symbol}</span>
                             <Badge variant={trade.status === 'open' ? 'default' : 'secondary'}>
-                                {trade.status === 'open' ? '持仓中' : '已平仓'}
+                                {trade.status === 'open' ? 'Open' : 'Closed'}
                             </Badge>
                         </SheetTitle>
-                        <div className={`text-2xl font-bold ${isProfit ? 'text-red-500' : 'text-green-500'}`}>
+                        <div className={`text-2xl font-bold ${isProfit ? 'text-green-500' : 'text-red-500'}`}>
                             {isProfit ? '+' : ''}{trade.netProfit?.toFixed(2)}
                         </div>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                        {trade.name} · 持仓 {trade.holdDays} 天
+                        {trade.name} · Held for {trade.holdDays} days
                     </div>
                 </SheetHeader>
 
                 <ScrollArea className="flex-1">
                     <div className="p-6 space-y-6">
-                        {/* 交易概览 */}
+                        {/* Trade Overview */}
                         <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                             <div>
-                                <div className="text-sm text-muted-foreground mb-1">开仓价格</div>
+                                <div className="text-sm text-muted-foreground mb-1">Open Price</div>
                                 <div className="text-lg font-mono">{trade.openPrice?.toFixed(3)}</div>
                                 <div className="text-xs text-muted-foreground">
                                     {format(new Date(trade.openDate), 'yyyy-MM-dd HH:mm')}
                                 </div>
                             </div>
                             <div>
-                                <div className="text-sm text-muted-foreground mb-1">平仓价格</div>
+                                <div className="text-sm text-muted-foreground mb-1">Close Price</div>
                                 <div className="text-lg font-mono">
                                     {trade.closePrice?.toFixed(3) || '-'}
                                 </div>
@@ -200,12 +183,12 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
                                 )}
                             </div>
                             <div>
-                                <div className="text-sm text-muted-foreground mb-1">成交数量</div>
+                                <div className="text-sm text-muted-foreground mb-1">Volume</div>
                                 <div className="text-lg font-mono">{trade.openVolume}</div>
                             </div>
                             <div>
-                                <div className="text-sm text-muted-foreground mb-1">收益率</div>
-                                <div className={`text-lg font-mono ${isProfit ? 'text-red-500' : 'text-green-500'}`}>
+                                <div className="text-sm text-muted-foreground mb-1">Return %</div>
+                                <div className={`text-lg font-mono ${isProfit ? 'text-green-500' : 'text-red-500'}`}>
                                     {trade.percentGain !== undefined ? `${trade.percentGain >= 0 ? '+' : ''}${trade.percentGain.toFixed(2)}%` : '-'}
                                 </div>
                             </div>
@@ -213,13 +196,13 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
 
                         <Tabs defaultValue="chart" className="w-full">
                             <TabsList className="w-full grid grid-cols-4">
-                                <TabsTrigger value="chart">图表</TabsTrigger>
-                                <TabsTrigger value="metrics">交易指标</TabsTrigger>
-                                <TabsTrigger value="tags">交易标签</TabsTrigger>
-                                <TabsTrigger value="notes">日志</TabsTrigger>
+                                <TabsTrigger value="chart">Chart</TabsTrigger>
+                                <TabsTrigger value="metrics">Metrics</TabsTrigger>
+                                <TabsTrigger value="tags">Tags</TabsTrigger>
+                                <TabsTrigger value="notes">Notes</TabsTrigger>
                             </TabsList>
 
-                            {/* 图表 Tab */}
+                            {/* Chart Tab */}
                             <TabsContent value="chart" className="mt-4">
                                 <div className="space-y-4">
                                     <div className="h-[400px] border rounded-lg overflow-hidden">
@@ -233,46 +216,46 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
                                     </div>
                                     <div className="flex items-center justify-center gap-6 text-sm">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                                            <span>买入点 (B)</span>
+                                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                            <span>Buy (B)</span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                                            <span>卖出点 (S)</span>
+                                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                                            <span>Sell (S)</span>
                                         </div>
                                     </div>
                                 </div>
                             </TabsContent>
 
-                            {/* 交易指标 Tab */}
+                            {/* Metrics Tab */}
                             <TabsContent value="metrics" className="mt-4 space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="p-4 border rounded-lg">
-                                        <div className="text-sm text-muted-foreground mb-2">交易信息</div>
+                                        <div className="text-sm text-muted-foreground mb-2">Trade Info</div>
                                         <div className="space-y-2 text-sm">
                                             <div className="flex justify-between">
-                                                <span>订单类型</span>
+                                                <span>Order Type</span>
                                                 <Badge variant="outline">{trade.status === 'open' ? 'Buy' : 'Sell'}</Badge>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span>符号</span>
+                                                <span>Symbol</span>
                                                 <span className="font-mono">{trade.symbol}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span>手数</span>
+                                                <span>Volume</span>
                                                 <span className="font-mono">{trade.openVolume}</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div className="p-4 border rounded-lg">
-                                        <div className="text-sm text-muted-foreground mb-2">开放时间</div>
+                                        <div className="text-sm text-muted-foreground mb-2">Open Time</div>
                                         <div className="text-sm font-mono">
                                             {format(new Date(trade.openDate), 'MMM d, yyyy, h:mm a')}
                                         </div>
                                         {trade.closeDate && (
                                             <>
-                                                <div className="text-sm text-muted-foreground mt-2 mb-1">关闭时间</div>
+                                                <div className="text-sm text-muted-foreground mt-2 mb-1">Close Time</div>
                                                 <div className="text-sm font-mono">
                                                     {format(new Date(trade.closeDate), 'MMM d, yyyy, h:mm a')}
                                                 </div>
@@ -281,52 +264,60 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
                                     </div>
 
                                     <div className="p-4 border rounded-lg">
-                                        <div className="text-sm text-muted-foreground mb-2">价格概要</div>
+                                        <div className="text-sm text-muted-foreground mb-2">Price Summary</div>
                                         <div className="space-y-2 text-sm">
                                             <div className="flex justify-between">
-                                                <span>开仓价</span>
+                                                <span>Open Price</span>
                                                 <span className="font-mono">{trade.openPrice?.toFixed(5)}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span>收盘价</span>
+                                                <span>Close Price</span>
                                                 <span className="font-mono">{trade.closePrice?.toFixed(5) || '-'}</span>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div className="p-4 border rounded-lg">
-                                        <div className="text-sm text-muted-foreground mb-2">交易成本</div>
+                                        <div className="text-sm text-muted-foreground mb-2">Trading Costs</div>
                                         <div className="space-y-2 text-sm">
                                             <div className="flex justify-between">
-                                                <span>开仓费用</span>
+                                                <span>Open Commission</span>
                                                 <span className="font-mono text-red-500">-{trade.openFee?.toFixed(2)}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span>平仓费用</span>
+                                                <span>Close Commission</span>
                                                 <span className="font-mono text-red-500">-{trade.closeFee?.toFixed(2) || '-'}</span>
+                                            </div>
+                                            <div className="flex justify-between border-t pt-1 mt-1">
+                                                <span>Total Commission</span>
+                                                <span className="font-mono text-red-500">-{totalCommission.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Swap Fee</span>
+                                                <span className="font-mono">-</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div className="p-4 border rounded-lg">
-                                    <div className="text-sm text-muted-foreground mb-2">交易结果</div>
+                                    <div className="text-sm text-muted-foreground mb-2">Trade Result</div>
                                     <div className="grid grid-cols-3 gap-4">
                                         <div>
-                                            <div className="text-xs text-muted-foreground">毛利润</div>
-                                            <div className={`text-lg font-mono ${(trade.profit || 0) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                                            <div className="text-xs text-muted-foreground">Gross Profit</div>
+                                            <div className={`text-lg font-mono ${(trade.profit || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                                                 {trade.profit?.toFixed(2) || '-'}
                                             </div>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-muted-foreground">净利润</div>
-                                            <div className={`text-lg font-mono ${isProfit ? 'text-blue-500' : 'text-red-500'}`}>
+                                            <div className="text-xs text-muted-foreground">Net Profit</div>
+                                            <div className={`text-lg font-mono ${isProfit ? 'text-green-500' : 'text-red-500'}`}>
                                                 {trade.netProfit?.toFixed(2) || '-'}
                                             </div>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-muted-foreground">百分比收益</div>
-                                            <div className={`text-lg font-mono ${(trade.percentGain || 0) >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                                            <div className="text-xs text-muted-foreground">Return %</div>
+                                            <div className={`text-lg font-mono ${(trade.percentGain || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                                                 {trade.percentGain?.toFixed(2) || '-'}%
                                             </div>
                                         </div>
@@ -335,22 +326,22 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <Label>止盈价格</Label>
+                                        <Label>Take Profit</Label>
                                         <Input
                                             type="number"
                                             step="0.001"
-                                            placeholder="设置止盈价格"
+                                            placeholder="Set take profit price"
                                             value={review.takeProfit || ''}
                                             onChange={(e) => setReview({ ...review, takeProfit: parseFloat(e.target.value) })}
                                             className="mt-1"
                                         />
                                     </div>
                                     <div>
-                                        <Label>止损价格</Label>
+                                        <Label>Stop Loss</Label>
                                         <Input
                                             type="number"
                                             step="0.001"
-                                            placeholder="设置止损价格"
+                                            placeholder="Set stop loss price"
                                             value={review.stopLoss || ''}
                                             onChange={(e) => setReview({ ...review, stopLoss: parseFloat(e.target.value) })}
                                             className="mt-1"
@@ -359,11 +350,11 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
                                 </div>
                             </TabsContent>
 
-                            {/* 标签 Tab */}
+                            {/* Tags Tab */}
                             <TabsContent value="tags" className="mt-4 space-y-6">
-                                {/* 评分 */}
+                                {/* Rating */}
                                 <div>
-                                    <Label className="mb-2 block">交易评分</Label>
+                                    <Label className="mb-2 block">Trade Rating</Label>
                                     <div className="flex items-center gap-2">
                                         {[1, 2, 3, 4, 5].map((star) => (
                                             <button
@@ -385,7 +376,7 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
 
                                 <Separator />
 
-                                {/* 心态标签 */}
+                                {/* Mindset Tags */}
                                 <TagSection
                                     title="Mindset"
                                     icon={<TrendingUp className="w-4 h-4" />}
@@ -395,7 +386,7 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
                                     onAdd={(tag) => addCustomTag('mindset', tag)}
                                 />
 
-                                {/* 策略标签 */}
+                                {/* Strategy Tags */}
                                 <TagSection
                                     title="Strategy Tags"
                                     icon={<Tag className="w-4 h-4" />}
@@ -406,7 +397,7 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
                                     variant="secondary"
                                 />
 
-                                {/* 错误标签 */}
+                                {/* Mistake Tags */}
                                 <TagSection
                                     title="Mistake Tags"
                                     icon={<TrendingDown className="w-4 h-4" />}
@@ -417,7 +408,7 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
                                     variant="destructive"
                                 />
 
-                                {/* 自定义标签 */}
+                                {/* Custom Tags */}
                                 <TagSection
                                     title="Custom Tags"
                                     icon={<Plus className="w-4 h-4" />}
@@ -430,30 +421,30 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
                                 />
                             </TabsContent>
 
-                            {/* 日志 Tab */}
+                            {/* Notes Tab */}
                             <TabsContent value="notes" className="mt-4 space-y-4">
                                 <div>
-                                    <Label>交易笔记</Label>
+                                    <Label>Trade Comment</Label>
                                     <Textarea
-                                        placeholder="记录这笔交易的分析、心得和教训..."
+                                        placeholder="Record your analysis, insights and lessons from this trade..."
                                         value={review.notes || ''}
                                         onChange={(e) => setReview({ ...review, notes: e.target.value })}
                                         className="mt-1 min-h-[150px]"
                                     />
                                 </div>
                                 <div>
-                                    <Label>交易计划</Label>
+                                    <Label>Trade Plan</Label>
                                     <Textarea
-                                        placeholder="记录入场和出场的计划..."
+                                        placeholder="Record your entry and exit plan..."
                                         value={review.tradePlan || ''}
                                         onChange={(e) => setReview({ ...review, tradePlan: e.target.value })}
                                         className="mt-1 min-h-[100px]"
                                     />
                                 </div>
                                 <div>
-                                    <Label>改进建议</Label>
+                                    <Label>Improvements</Label>
                                     <Textarea
-                                        placeholder="记录下次可以改进的地方..."
+                                        placeholder="What can be improved next time..."
                                         value={review.improvements || ''}
                                         onChange={(e) => setReview({ ...review, improvements: e.target.value })}
                                         className="mt-1 min-h-[100px]"
@@ -466,10 +457,10 @@ export function TradeReviewPanel({ trade, open, onOpenChange, onSave }: TradeRev
 
                 <div className="px-6 py-4 border-t flex justify-end gap-3">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        取消
+                        Cancel
                     </Button>
                     <Button onClick={handleSave} disabled={isSaving}>
-                        {isSaving ? '保存中...' : '保存复盘'}
+                        {isSaving ? 'Saving...' : 'Save Review'}
                     </Button>
                 </div>
             </SheetContent>
@@ -514,7 +505,7 @@ function TagSection({ title, icon, tags, selectedTags, onToggle, onAdd, variant 
                         <Input
                             value={newTag}
                             onChange={(e) => setNewTag(e.target.value)}
-                            placeholder="添加标签"
+                            placeholder="Add tag"
                             className="h-7 w-24 text-xs"
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
@@ -541,15 +532,15 @@ function TagSection({ title, icon, tags, selectedTags, onToggle, onAdd, variant 
     );
 }
 
-// A股代码转换为 TradingView 格式
+// Convert A-share code to TradingView format
 function convertToTradingViewSymbol(symbol?: string): string {
     if (!symbol) return '';
     
-    // 上海股票 (6开头)
+    // Shanghai stocks (6开头)
     if (symbol.startsWith('6')) {
         return `SSE:${symbol}`;
     }
-    // 深圳股票 (0, 3开头)
+    // Shenzhen stocks (0, 3开头)
     if (symbol.startsWith('0') || symbol.startsWith('3')) {
         return `SZSE:${symbol}`;
     }

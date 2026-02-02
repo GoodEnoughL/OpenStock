@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
-import { Upload, FileSpreadsheet, AlertCircle, Check } from 'lucide-react';
+import { Upload, FileSpreadsheet, AlertCircle, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { importTrades, ParsedTradeRow } from '@/lib/actions/trade.actions';
 import {
@@ -20,11 +20,40 @@ interface ExcelImporterProps {
     onImportSuccess?: () => void;
 }
 
+// Chinese to English column name mapping
+const COLUMN_NAME_MAPPING: Record<string, string> = {
+    '成交日期': 'Trade Date',
+    '证券代码': 'Symbol',
+    '证券名称': 'Name',
+    '操作': 'Operation',
+    '资金余额': 'Balance',
+    '成交数量': 'Volume',
+    '成交均价': 'Price',
+    '成交金额': 'Amount',
+    '发生金额': 'Flow Amount',
+    '手续费': 'Fee',
+    '印花税': 'Tax',
+    '其他杂费': 'Other Fee',
+    '本次金额': 'Total Amount',
+    '合同编号': 'Contract No',
+    '成交编号': 'Trade No',
+    '交易市场': 'Market',
+    '币种': 'Currency',
+    '股票余额': 'Stock Balance',
+    '市场名称': 'Market Name',
+    '成交时间': 'Trade Time',
+    '市场代码': 'Market Code',
+};
+
 export function ExcelImporter({ userId, onImportSuccess }: ExcelImporterProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [previewData, setPreviewData] = useState<ParsedTradeRow[]>([]);
+    const [rawHeaders, setRawHeaders] = useState<string[]>([]);
+    const [rawData, setRawData] = useState<any[][]>([]);
     const [showPreview, setShowPreview] = useState(false);
     const [fileName, setFileName] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 100;
 
     const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -32,6 +61,7 @@ export function ExcelImporter({ userId, onImportSuccess }: ExcelImporterProps) {
 
         setFileName(file.name);
         setIsUploading(true);
+        setCurrentPage(1);
 
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -39,20 +69,22 @@ export function ExcelImporter({ userId, onImportSuccess }: ExcelImporterProps) {
                 const data = new Uint8Array(e.target?.result as ArrayBuffer);
                 const workbook = XLSX.read(data, { type: 'array' });
                 
-                // 读取第一个工作表
+                // Read first sheet
                 const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                 const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as any[][];
                 
                 if (jsonData.length < 2) {
-                    toast.error('Excel 文件为空或格式不正确');
+                    toast.error('Excel file is empty or has incorrect format');
                     setIsUploading(false);
                     return;
                 }
 
-                // 解析表头
+                // Parse headers
                 const headers = jsonData[0] as string[];
+                setRawHeaders(headers);
+                setRawData(jsonData.slice(1));
                 
-                // 映射字段
+                // Map fields for internal use
                 const fieldMapping: Record<string, string> = {
                     '成交日期': 'tradeDate',
                     '证券代码': 'symbol',
@@ -77,7 +109,7 @@ export function ExcelImporter({ userId, onImportSuccess }: ExcelImporterProps) {
                     '市场代码': 'marketCode',
                 };
 
-                // 解析数据行
+                // Parse data rows
                 const parsedRows: ParsedTradeRow[] = [];
                 for (let i = 1; i < jsonData.length; i++) {
                     const row = jsonData[i];
@@ -91,24 +123,24 @@ export function ExcelImporter({ userId, onImportSuccess }: ExcelImporterProps) {
                         }
                     });
 
-                    // 验证必要字段
+                    // Validate required fields
                     if (parsedRow.tradeDate && parsedRow.operation) {
                         parsedRows.push(parsedRow as ParsedTradeRow);
                     }
                 }
 
                 if (parsedRows.length === 0) {
-                    toast.error('未找到有效的交易数据，请检查文件格式');
+                    toast.error('No valid trade data found. Please check file format');
                     setIsUploading(false);
                     return;
                 }
 
                 setPreviewData(parsedRows);
                 setShowPreview(true);
-                toast.success(`成功解析 ${parsedRows.length} 条交易记录`);
+                toast.success(`Successfully parsed ${parsedRows.length} trade records`);
             } catch (error) {
                 console.error('Parse error:', error);
-                toast.error('解析 Excel 文件失败，请检查文件格式');
+                toast.error('Failed to parse Excel file. Please check file format');
             } finally {
                 setIsUploading(false);
             }
@@ -123,16 +155,28 @@ export function ExcelImporter({ userId, onImportSuccess }: ExcelImporterProps) {
         setIsUploading(true);
         try {
             const result = await importTrades(userId, previewData);
-            toast.success(`成功导入 ${result.count} 条交易记录`);
+            toast.success(`Successfully imported ${result.count} trade records`);
             setShowPreview(false);
             setPreviewData([]);
+            setRawHeaders([]);
+            setRawData([]);
+            setCurrentPage(1);
             onImportSuccess?.();
         } catch (error) {
             console.error('Import error:', error);
-            toast.error('导入失败，请重试');
+            toast.error('Import failed. Please try again');
         } finally {
             setIsUploading(false);
         }
+    };
+
+    // Pagination
+    const totalPages = Math.ceil(rawData.length / itemsPerPage);
+    const paginatedData = rawData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    // Convert Chinese header to English
+    const getEnglishHeader = (header: string) => {
+        return COLUMN_NAME_MAPPING[header] || header;
     };
 
     return (
@@ -149,7 +193,7 @@ export function ExcelImporter({ userId, onImportSuccess }: ExcelImporterProps) {
                     <Button variant="outline" className="cursor-pointer" disabled={isUploading} asChild>
                         <span>
                             <Upload className="w-4 h-4 mr-2" />
-                            {isUploading ? '解析中...' : '导入 Excel'}
+                            {isUploading ? 'Parsing...' : 'Import Excel'}
                         </span>
                     </Button>
                 </label>
@@ -162,70 +206,88 @@ export function ExcelImporter({ userId, onImportSuccess }: ExcelImporterProps) {
             </div>
 
             <Dialog open={showPreview} onOpenChange={setShowPreview}>
-                <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+                <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-hidden flex flex-col">
                     <DialogHeader>
-                        <DialogTitle>数据预览</DialogTitle>
+                        <DialogTitle>Data Preview</DialogTitle>
                         <DialogDescription>
-                            共 {previewData.length} 条记录，请确认数据无误后导入
+                            Total {previewData.length} records. Please verify data before importing.
                         </DialogDescription>
                     </DialogHeader>
 
                     <Alert className="mb-4">
                         <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
-                            系统将自动匹配买入卖出记录并计算盈亏。导入后可以在交易日志中查看详细分析。
+                            The system will automatically match buy/sell records and calculate P&L. 
+                            You can view detailed analysis in the trade journal after import.
                         </AlertDescription>
                     </Alert>
+
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between mb-4">
+                            <span className="text-sm text-muted-foreground">
+                                Showing {(currentPage - 1) * itemsPerPage + 1} - {Math.min(currentPage * itemsPerPage, rawData.length)} of {rawData.length} rows
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </Button>
+                                <span className="text-sm">
+                                    Page {currentPage} of {totalPages}
+                                </span>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage === totalPages}
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="flex-1 overflow-auto border rounded-md">
                         <table className="w-full text-sm">
                             <thead className="bg-muted sticky top-0">
                                 <tr>
-                                    <th className="px-3 py-2 text-left">日期</th>
-                                    <th className="px-3 py-2 text-left">代码</th>
-                                    <th className="px-3 py-2 text-left">名称</th>
-                                    <th className="px-3 py-2 text-left">操作</th>
-                                    <th className="px-3 py-2 text-right">数量</th>
-                                    <th className="px-3 py-2 text-right">价格</th>
-                                    <th className="px-3 py-2 text-right">金额</th>
+                                    {rawHeaders.map((header, idx) => (
+                                        <th key={idx} className="px-3 py-2 text-left whitespace-nowrap font-semibold">
+                                            {getEnglishHeader(header)}
+                                        </th>
+                                    ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                {previewData.slice(0, 20).map((row, idx) => (
-                                    <tr key={idx} className="border-b hover:bg-muted/50">
-                                        <td className="px-3 py-2">{row.tradeDate}</td>
-                                        <td className="px-3 py-2 font-mono">{row.symbol}</td>
-                                        <td className="px-3 py-2">{row.name}</td>
-                                        <td className="px-3 py-2">
-                                            <span className={getOperationClass(row.operation)}>
-                                                {row.operation}
-                                            </span>
-                                        </td>
-                                        <td className="px-3 py-2 text-right">{row.volume}</td>
-                                        <td className="px-3 py-2 text-right">{row.price}</td>
-                                        <td className="px-3 py-2 text-right">{row.amount}</td>
+                                {paginatedData.map((row, rowIdx) => (
+                                    <tr key={rowIdx} className="border-b hover:bg-muted/50">
+                                        {row.map((cell, cellIdx) => (
+                                            <td key={cellIdx} className="px-3 py-2 whitespace-nowrap">
+                                                {cell !== undefined && cell !== null ? String(cell) : '-'}
+                                            </td>
+                                        ))}
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
-                        {previewData.length > 20 && (
-                            <div className="p-3 text-center text-sm text-muted-foreground">
-                                还有 {previewData.length - 20} 条记录...
-                            </div>
-                        )}
                     </div>
 
                     <div className="flex justify-end gap-3 mt-4">
                         <Button variant="outline" onClick={() => setShowPreview(false)}>
-                            取消
+                            Cancel
                         </Button>
                         <Button onClick={handleImport} disabled={isUploading}>
                             {isUploading ? (
-                                '导入中...'
+                                'Importing...'
                             ) : (
                                 <>
                                     <Check className="w-4 h-4 mr-2" />
-                                    确认导入
+                                    Confirm Import
                                 </>
                             )}
                         </Button>
@@ -234,14 +296,4 @@ export function ExcelImporter({ userId, onImportSuccess }: ExcelImporterProps) {
             </Dialog>
         </>
     );
-}
-
-function getOperationClass(operation: string): string {
-    if (operation?.includes('买入') || operation?.includes('申购')) {
-        return 'text-red-500 font-medium';
-    }
-    if (operation?.includes('卖出') || operation?.includes('赎回')) {
-        return 'text-green-500 font-medium';
-    }
-    return 'text-muted-foreground';
 }
